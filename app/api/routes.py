@@ -12,11 +12,11 @@ import httpx
 
 router = APIRouter()
 
-# helper error
+# Helper error type
 class ExternalAPIError(Exception):
     pass
 
-# Move httpx usage into an async helper (no async at import time)
+# Move async httpx usage into a proper async helper (no async at import-time)
 async def fetch_external_data():
     countries_url = "https://restcountries.com/v2/all?fields=name,capital,region,population,flag,currencies"
     rates_url = "https://open.er-api.com/v6/latest/USD"
@@ -24,12 +24,12 @@ async def fetch_external_data():
     async with httpx.AsyncClient(timeout=timeout) as client:
         resp_c = await client.get(countries_url)
         if resp_c.status_code != 200:
-            raise ExternalAPIError("Could not fetch countries")
+            raise ExternalAPIError(f"Could not fetch countries: {resp_c.status_code}")
         countries_data = resp_c.json()
 
         resp_r = await client.get(rates_url)
         if resp_r.status_code != 200:
-            raise ExternalAPIError("Could not fetch rates")
+            raise ExternalAPIError(f"Could not fetch rates: {resp_r.status_code}")
         rates_data = resp_r.json()
 
     return countries_data, rates_data
@@ -41,7 +41,7 @@ async def refresh_countries(db=Depends(get_db)):
     Fetch external APIs then perform DB upserts and image generation.
     If any external fetch fails, return 503 and do not modify DB.
     """
-    # 1) Fetch external data first (async helper)
+    # Fetch external data first
     try:
         countries_data, rates = await fetch_external_data()
     except ExternalAPIError as e:
@@ -51,7 +51,7 @@ async def refresh_countries(db=Depends(get_db)):
             detail={"error": "External data source unavailable", "details": str(e)}
         )
 
-    # 2) Apply DB changes in a transaction — commit only if processing succeeded
+    # Apply DB changes in a transaction (commit only on success)
     try:
         with db.begin():
             process_and_upsert_countries(db, countries_data, rates)
@@ -59,7 +59,7 @@ async def refresh_countries(db=Depends(get_db)):
         logging.exception("DB operation failed during refresh")
         raise HTTPException(status_code=500, detail={"error": "Internal server error"})
 
-    # 3) Generate image after DB commit (use settings)
+    # Generate image after DB commit
     try:
         total, top5, ts = compute_summary(db)
         from app.core.image_generator import generate_summary_image

@@ -19,7 +19,9 @@ def generate_summary_image(db: Session, timestamp: datetime):
     """
     # Create cache directory if it doesn't exist
     cache_dir = Path(settings.CACHE_DIR)
-    cache_dir.mkdir(exist_ok=True)
+    if not cache_dir.is_absolute():
+        cache_dir = Path.cwd() / cache_dir
+    cache_dir.mkdir(parents=True, exist_ok=True)
 
     # Get total countries
     total_countries = db.query(Country).count()
@@ -80,5 +82,8 @@ def generate_summary_image(db: Session, timestamp: datetime):
 
     # Save image
     image_path = cache_dir / settings.IMAGE_FILENAME
-    image.save(image_path)
-    print(f"Summary image generated: {image_path}")
+    try:
+        image.save(image_path)
+        print(f"Summary image generated: {image_path}")
+    except Exception as e:
+        print(f"Warning: Failed to save summary image: {e}")

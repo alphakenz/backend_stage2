@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api import routes
 from app.core.config import settings
 from app.models.database import init_db
+import logging
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -56,20 +57,7 @@ async def root():
 @app.on_event("startup")
 async def startup_event():
     """Run on application startup"""
-    import os
-    print(f"Starting {settings.APP_NAME} v{settings.APP_VERSION}")
-    
-    # Debug: Print all MySQL-related environment variables
-    print("\n=== ENVIRONMENT VARIABLES ===")
-    for key in os.environ:
-        if "MYSQL" in key.upper() or "DATABASE" in key.upper():
-            # Don't print passwords
-            value = os.environ[key]
-            if "password" in key.lower() or "pass" in key.lower():
-                value = "***HIDDEN***"
-            elif "@" in value:
-                # Hide password in connection string
-                value = value.split("@")[0].split(":")[:-1] + ["***"] + ["@"] + value.split("@")[1:]
-                value = ":".join(value) if isinstance(value, list) else value
-            print(f"{key} = {value}")
-    print("============================\n")
+    logging.basicConfig(level=logging.INFO if not settings.DEBUG else logging.DEBUG)
+    logging.info(f"Starting {settings.APP_NAME} v{settings.APP_VERSION}")
+    # Initialize DB but don't let failures stop the app (init_db logs warnings)
+    init_db()

@@ -1,7 +1,9 @@
 """
 FastAPI application entry point
 """
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, HTTPException
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from app.api import routes
 from app.core.config import settings
@@ -54,10 +56,40 @@ async def root():
     }
 
 
+# Exception handlers to match brief JSON shapes
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    detail = exc.detail
+    if isinstance(detail, dict):
+        err = detail.get("error") or detail
+        details = {k: v for k, v in detail.items() if k != "error"} or None
+        body = {"error": err} if isinstance(err, str) else {"error": str(err)}
+        if details:
+            body["details"] = details
+    else:
+        body = {"error": str(detail)}
+    return JSONResponse(status_code=exc.status_code, content=body)
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    # Convert Pydantic errors into brief-required shape
+    errors = {}
+    for err in exc.errors():
+        loc = ".".join([str(x) for x in err.get("loc", [])])
+        errors[loc] = err.get("msg")
+    return JSONResponse(status_code=400, content={"error": "Validation failed", "details": errors})
+
+
+@app.exception_handler(Exception)
+async def generic_exception_handler(request: Request, exc: Exception):
+    logging.exception("Unhandled exception")
+    return JSONResponse(status_code=500, content={"error": "Internal server error"})
+
+
 @app.on_event("startup")
 async def startup_event():
-    """Run on application startup"""
     logging.basicConfig(level=logging.INFO if not settings.DEBUG else logging.DEBUG)
     logging.info(f"Starting {settings.APP_NAME} v{settings.APP_VERSION}")
-    # Initialize DB but don't let failures stop the app (init_db logs warnings)
+    # Initialize DB safely at startup
     init_db()

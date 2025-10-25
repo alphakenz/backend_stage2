@@ -3,18 +3,15 @@ Image generation utility for summary statistics
 """
 from PIL import Image, ImageDraw, ImageFont
 from pathlib import Path
-from datetime import datetime
-from sqlalchemy.orm import Session
-from app.models.country import Country
 from app.core.config import settings
 
-
-def generate_summary_image(db: Session, timestamp: datetime):
+def generate_summary_image(summary_text, top_countries, timestamp):
     """
     Generate a summary image with country statistics
     
     Args:
-        db: Database session
+        summary_text: Summary text to display
+        top_countries: List of top countries by estimated GDP
         timestamp: Timestamp of the refresh
     """
     # Create cache directory if it doesn't exist
@@ -22,16 +19,6 @@ def generate_summary_image(db: Session, timestamp: datetime):
     if not cache_dir.is_absolute():
         cache_dir = Path.cwd() / cache_dir
     cache_dir.mkdir(parents=True, exist_ok=True)
-
-    # Get total countries
-    total_countries = db.query(Country).count()
-
-    # Get top 5 countries by estimated GDP
-    top_countries = db.query(Country).filter(
-        Country.estimated_gdp.isnot(None)
-    ).order_by(
-        Country.estimated_gdp.desc()
-    ).limit(5).all()
 
     # Create image
     width, height = 800, 600
@@ -55,10 +42,9 @@ def generate_summary_image(db: Session, timestamp: datetime):
     title = "Country Data Summary"
     draw.text((400, 40), title, fill='#00d4ff', font=title_font, anchor="mm")
 
-    # Draw total countries
+    # Draw summary text
     y_position = 100
-    total_text = f"Total Countries: {total_countries}"
-    draw.text((50, y_position), total_text, fill='#ffffff', font=header_font)
+    draw.text((50, y_position), summary_text, fill='#ffffff', font=header_font)
 
     # Draw timestamp
     y_position += 50
@@ -84,6 +70,6 @@ def generate_summary_image(db: Session, timestamp: datetime):
     image_path = cache_dir / settings.IMAGE_FILENAME
     try:
         image.save(image_path)
-        print(f"Summary image generated: {image_path}")
+        logging.info(f"Summary image generated: {image_path}")
     except Exception as e:
-        print(f"Warning: Failed to save summary image: {e}")
+        logging.warning(f"Failed to save summary image: {e}")

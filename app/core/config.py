@@ -3,7 +3,6 @@ Configuration settings for the application
 """
 import os
 from pydantic_settings import BaseSettings
-from typing import Optional
 
 
 class Settings(BaseSettings):
@@ -13,9 +12,11 @@ class Settings(BaseSettings):
     APP_NAME: str = "Country Currency & Exchange API"
     APP_VERSION: str = "1.0.0"
     
-    # Database
-    DATABASE_URL: str = os.getenv(
-        "DATABASE_URL",
+    # Database - CRITICAL: Check multiple possible variable names
+    DATABASE_URL: str = (
+        os.getenv("DATABASE_URL") or
+        os.getenv("MYSQL_URL") or
+        os.getenv("MYSQLURL") or
         "mysql+pymysql://root:password@localhost:3306/country_api"
     )
     
@@ -38,3 +39,14 @@ class Settings(BaseSettings):
 
 # Create settings instance
 settings = Settings()
+
+# Debug: Print database URL (remove host/password for security)
+if settings.DATABASE_URL:
+    # Extract just the host part for debugging
+    if "@" in settings.DATABASE_URL:
+        host_part = settings.DATABASE_URL.split("@")[1].split("/")[0]
+        print(f"[CONFIG] Connecting to MySQL at: {host_part}")
+    else:
+        print(f"[CONFIG] Database URL configured")
+else:
+    print("[CONFIG] WARNING: No DATABASE_URL found!")

@@ -56,11 +56,20 @@ async def root():
 @app.on_event("startup")
 async def startup_event():
     """Run on application startup"""
+    import os
     print(f"Starting {settings.APP_NAME} v{settings.APP_VERSION}")
-    print(f"Database: {settings.DATABASE_URL.split('@')[1] if '@' in settings.DATABASE_URL else 'configured'}")
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Run on application shutdown"""
-    print("Shutting down application...")
+    
+    # Debug: Print all MySQL-related environment variables
+    print("\n=== ENVIRONMENT VARIABLES ===")
+    for key in os.environ:
+        if "MYSQL" in key.upper() or "DATABASE" in key.upper():
+            # Don't print passwords
+            value = os.environ[key]
+            if "password" in key.lower() or "pass" in key.lower():
+                value = "***HIDDEN***"
+            elif "@" in value:
+                # Hide password in connection string
+                value = value.split("@")[0].split(":")[:-1] + ["***"] + ["@"] + value.split("@")[1:]
+                value = ":".join(value) if isinstance(value, list) else value
+            print(f"{key} = {value}")
+    print("============================\n")

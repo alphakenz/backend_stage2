@@ -4,6 +4,7 @@ Image generation utility for summary statistics
 from PIL import Image, ImageDraw, ImageFont
 from pathlib import Path
 from app.core.config import settings
+import logging
 
 def generate_summary_image(summary_text, top_countries, timestamp):
     """

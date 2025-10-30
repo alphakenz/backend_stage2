@@ -10,6 +10,5 @@ python-dotenv
 pytest
 pytest-asyncio
 pytest-mock
-pymysql
 cryptography  
 aiomysql

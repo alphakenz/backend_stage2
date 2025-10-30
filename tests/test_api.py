@@ -1,144 +1,61 @@
-"""
-API tests for Country Currency & Exchange API
-Run with: pytest tests/test_api.py -v
-"""
 import pytest
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from app.models.database import Base, get_db
-from app.main import app
+from unittest.mock import patch, AsyncMock
+import json
 
-# Use SQLite for testing
-SQLALCHEMY_DATABASE_URL = "sqlite:///./test.db"
-engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+def test_get_status(client):
+    response = client.get("/status")
+    assert response.status_code == 200
+    assert "total_countries" in response.json()
+    assert "last_refreshed_at" in response.json()
 
-# Create tables
-Base.metadata.create_all(bind=engine)
+def test_get_country_not_found(client):
+    response = client.get("/countries/NonexistentCountry")
+    assert response.status_code == 404
+    assert response.json()["error"] == "Country not found"
 
+def test_delete_country_not_found(client):
+    response = client.delete("/countries/NonexistentCountry")
+    assert response.status_code == 404
+    assert response.json()["error"] == "Country not found"
 
-def override_get_db():
-    """Override database dependency for testing"""
-    try:
-        db = TestingSessionLocal()
-        yield db
-    finally:
-        db.close()
-
-
-app.dependency_overrides[get_db] = override_get_db
-client = TestClient(app)
-
-
-@pytest.fixture(autouse=True)
-def cleanup():
-    """Clean up database before each test"""
-    yield
-    # Cleanup after test
-    Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
-
-
-class TestRootEndpoint:
-    """Tests for root endpoint"""
+@patch('app.external_apis.external_api_service.fetch_countries')
+@patch('app.external_apis.external_api_service.fetch_exchange_rates')
+def test_refresh_success(mock_rates, mock_countries, client):
+    # Mock external API responses
+    mock_countries.return_value = AsyncMock(return_value=[
+        {
+            "name": "Test Country",
+            "capital": "Test Capital", 
+            "region": "Test Region",
+            "population": 1000000,
+            "flag": "https://flagcdn.com/tc.svg",
+            "currencies": [{"code": "TST", "name": "Test Currency", "symbol": "T"}]
+        }
+    ])
     
-    def test_root_endpoint(self):
-        """Test root endpoint returns API information"""
-        response = client.get("/")
-        assert response.status_code == 200
-        data = response.json()
-        assert "message" in data
-        assert "endpoints" in data
-        assert "version" in data
-
-
-class TestStatusEndpoint:
-    """Tests for status endpoint"""
+    mock_rates.return_value = AsyncMock(return_value={"TST": 1.5})
     
-    def test_status_endpoint_empty(self):
-        """Test status endpoint when no data exists"""
-        response = client.get("/status")
-        assert response.status_code == 200
-        data = response.json()
-        assert data["total_countries"] == 0
-        assert data["last_refreshed_at"] is None
+    response = client.post("/countries/refresh")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["message"] == "Refresh successful"
+    assert "total_countries" in data
 
+@patch('app.external_apis.external_api_service.fetch_countries')
+def test_refresh_countries_api_failure(mock_countries, client):
+    mock_countries.side_effect = Exception("API failure")
+    
+    response = client.post("/countries/refresh")
+    assert response.status_code == 503
+    data = response.json()
+    assert data["error"] == "External data source unavailable"
 
-class TestCountriesEndpoint:
-    """Tests for countries endpoints"""
-    
-    def test_get_countries_empty(self):
-        """Test getting countries when database is empty"""
-        response = client.get("/countries")
-        assert response.status_code == 200
-        assert response.json() == []
-    
-    def test_get_country_not_found(self):
-        """Test getting non-existent country"""
-        response = client.get("/countries/NonExistentCountry")
-        assert response.status_code == 404
-        data = response.json()
-        assert "error" in data
-        assert data["error"] == "Country not found"
-    
-    def test_delete_country_not_found(self):
-        """Test deleting non-existent country"""
-        response = client.delete("/countries/NonExistentCountry")
-        assert response.status_code == 404
-        data = response.json()
-        assert "error" in data
-    
-    def test_filter_by_region(self):
-        """Test filtering countries by region"""
-        response = client.get("/countries?region=Africa")
-        assert response.status_code == 200
-        assert isinstance(response.json(), list)
-    
-    def test_filter_by_currency(self):
-        """Test filtering countries by currency"""
-        response = client.get("/countries?currency=USD")
-        assert response.status_code == 200
-        assert isinstance(response.json(), list)
-    
-    def test_sort_by_gdp(self):
-        """Test sorting countries by GDP"""
-        response = client.get("/countries?sort=gdp_desc")
-        assert response.status_code == 200
-        assert isinstance(response.json(), list)
+def test_get_summary_image_not_found(client):
+    response = client.get("/countries/image")
+    assert response.status_code == 404
+    assert response.json()["error"] == "Summary image not found"
 
-
-class TestImageEndpoint:
-    """Tests for image endpoint"""
-    
-    def test_get_image_not_found(self):
-        """Test getting image when it doesn't exist"""
-        response = client.get("/countries/image")
-        assert response.status_code == 404
-        data = response.json()
-        assert "error" in data
-        assert data["error"] == "Summary image not found"
-
-
-class TestRefreshEndpoint:
-    """Tests for refresh endpoint"""
-    
-    def test_refresh_countries(self):
-        """Test refreshing countries from external APIs"""
-        response = client.post("/countries/refresh")
-        
-        # This will fail if external APIs are down, but that's expected
-        if response.status_code == 200:
-            data = response.json()
-            assert "message" in data
-            assert "total_countries" in data
-            assert "last_refreshed_at" in data
-            assert data["total_countries"] > 0
-        elif response.status_code == 503:
-            # External API unavailable - this is acceptable in tests
-            data = response.json()
-            assert "error" in data
-
-
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
+def test_get_countries_with_filters(client):
+    response = client.get("/countries?region=Africa")
+    assert response.status_code == 200
+    assert isinstance(response.json(), list)

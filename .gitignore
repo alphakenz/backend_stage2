@@ -19,7 +19,6 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-MANIFEST
 
 # Virtual Environment
 venv/
@@ -27,42 +26,36 @@ ENV/
 env/
 .venv
 
-# Environment Variables
-.env
-.env.local
-.env.*.local
-
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
-.DS_Store
 
-# Cache
-cache/
-*.png
-*.jpg
-*.jpeg
+# Environment variables
+.env
 
 # Database
 *.db
 *.sqlite
 *.sqlite3
 
-# Logs
-*.log
-logs/
+# Cache
+cache/
+__pycache__/
 
-# Testing
-.pytest_cache/
+# Test coverage
 .coverage
 htmlcov/
-test.db
+.pytest_cache/
 
-# FastAPI
-.mypy_cache/
+# Logs
+*.log
 
 # OS
+.DS_Store
 Thumbs.db
+
+# Docker
+.dockerignore
